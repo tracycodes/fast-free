@@ -21,8 +21,33 @@ require(["jquery", "underscore"], function ($, _) {
     var loans = [];
 
     var Helpers = (function() {
+        var months = [
+            'January',
+            'February',
+            'March',
+            'April',
+            'May',
+            'June',
+            'July',
+            'August',
+            'September',
+            'October',
+            'November',
+            'December'
+        ];
 
-        function getMonthlyInterest: function(balance, rate) {
+        function getMonthString(value) {
+            return months[value];
+        }
+
+        function getNextMonthIndex(index) {
+            if(index === months.length - 1) {
+                return 0;
+            }
+            return index + 1;
+        }
+
+        function getMonthlyInterest(balance, rate) {
             return ((balance * rate) / 365) * 30;
         }
 
@@ -51,50 +76,85 @@ require(["jquery", "underscore"], function ($, _) {
                     return rate;
                 }
             },
+
+            //Given a set of loans (with a balance, rate and minimum payment) determine
+            //the chart data for those loans.
+            //
             //TSL - need to add logic to handle multiple loans
             //(wisely choose to pay towards the highest interest rate loan for any money over minimum)
-            crunchLoanData: function(loans, expectedPayment, interval) {
+            crunchLoanData: function(loans, expectedPayment) {
                 var localLoans = [];
 
                 _.each(loans, function(loan) {
                     localLoans.push({
                         balance: loan.balance,
                         rate: loan.rate,
-                        minPayment: loa.minPayment
+                        minPayment: loan.minPayment
                     });
                 });
 
                 localLoans.sort(interestSort);
 
-                expectedPayment = expectedPayment || _.reduce(loans, function(loan, sum) { return sum + loan.minPayment }, 0);
-                interval = interval || 3;
+                var minimumPayment = _.reduce(localLoans, function(loan, sum) { return sum + loan.minPayment; }, 0);
+                expectedPayment = expectedPayment || minimumPayment;
+                if(expectedPayment < minimumPayment) {
+                    throw new Error("The expected payment cannot be less than the minimum payment");
+                }
 
-                //If a specific loan reaches zero, then re-allocate the money from that loan to another loan.
-                var remainingLoanBalance = _.reduce(loans, function(loan, sum) { return sum + loan.balance }, 0);
+                var remainingLoanBalance = _.reduce(localLoans, function(loan, sum) { return sum + loan.balance; }, 0);
+                if(remainingLoanBalance === 0) {
+                    throw new Error("The loan balance is zero");
+                }
 
-                //Iterate through the loans paying off their balance and removing until a data set is found
-                //in which all loans are at 0.
-                var loanValuesPerMonth = [];
+                var loansOverTime = {},
+                    currentPayment = expectedPayment,
+                    currentYear = new Date().year,
+                    currentMonth = new Date().month;
+
                 while(localLoans.length > 0) {
+                    //Store off the new loan value and step forward in time
+                    if(!loansOverTime[currentYear]) {
+                        loansOverTime[currentYear] = {};
+                    }
 
-                    //Work from the lowest interest to the highest interest
-                    //Reduce the monthly payment by minimum payment for each loan
-                    //On the last loan, pay any extra money towards the balance.
-                    //
-                    //After each step through the algorithm, save off the current totals for all loans
-                    //Chart that information
-                    _.each(localLoans, function(loan) {
-                        //TSL - handle edge case where minPayment is greater than remaining balance
-                        var nextBalance = getNextMonthLoanBalance(loan.balance, loan.rate, loan.minPayment);
-                        loan.balance = nextBalance;
-                        if(loan.balance <= 0) {
+                    loansOverTime[currentYear][getMonthString(currentMonth)] = _.reduce(localLoans, function(loan) { return  sum + loan.balance; }, 0);
+                    currentMonth = getNextMonthIndex(currentMonth);
+                    if(currentMonth === 0) {
+                        currentYear++;
+                    }
 
+                    //Reduce the loan values by min payment amount
+                    currentPayment = expectedPayment;
+                    _.each(localLoans, function(loan, index) {
+                        loan.balance = getNextMonthLoanBalance(loan.balance, loan.rate, loan.minPayment);
+
+                        currentPayment -= loan.minPayment;
+                        if(loan.balance < 0) {
+                            currentPayment += (-loan.balance);
+                            loan.balance = 0;
                         }
                     });
+
+                    //Remove any completed loans
+                    localLoans = _.filter(localLoans, function(loan) { return loan.balance === 0;});
+
+                    //Pay any extra money towards the next available loans
+                    if(currentPayment > 0) {
+                        _.each(localLoans, function(loan) {
+                            loan.balance -= currentPayment;
+                            if(loan.balance < 0) {
+                                currentPayment += (-loan.balance);
+                                loan.balance = 0;
+                            }
+                        });
+                    }
                 }
+
+                return loansOverTime;
 
             },
             updateChart: function(loans) {
+                var chartData = helpers.crunchLoanData(loans);
                 //Produce a chart based on the loans
             }
         };
