@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Loan Calculator</title>
+    <link rel="stylesheet" href="components/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="components/bootstrap/dist/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div id="wrap">
+        <div class="container">
+            <div class="page-header">
+                <h1>Loan Calculator</h1>
+            </div>
+
+            <div id="message-container"></div>
+            <form id="loan-entry" class="form-inline" role="form">
+                <div class="form-group">
+                    <label class="sr-only" for="loan-balance">Loan Balance</label>
+                    <input type="text" class="form-control" id="loan-balance" placeholder="Enter loan balance">
+                </div>
+                <div class="form-group">
+                    <label class="sr-only" for="loan-rate">Interest Rate</label>
+                    <input type="text" class="form-control" id="loan-rate" placeholder="Enter interest rate">
+                </div>
+                <div class="form-group">
+                    <label class="sr-only" for="loan-min-payment">Minimum Payment</label>
+                    <input type="text" class="form-control" id="loan-min-payment" placeholder="Enter minimum payment">
+                </div>
+                <button type="submit" class="btn btn-default">Add Loan</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <p class="text-muted">Brought to you with by Tracy Livengood</p>
+      </div>
+    </div>
+
+    <script src="components/requirejs/require.js" data-main="js/main"></script>
+</body>
+</html>
