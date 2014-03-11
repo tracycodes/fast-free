@@ -11,10 +11,12 @@ define(["loan", "notifier", "backbone", "jquery", "underscore", "jquery.bootstra
             this.notifier = new Notifier();
         },
 
-        processLoan: function() {
+        processLoan: function(e) {
+            e.preventDefault();
+
             this.notifier.reset();
 
-            var loan = new Loan({validate: true});
+            var loan = new Loan();
             loan.on('invalid', function(model, message) { this.notifier.display(message); }, this);
             loan.set({
                 balance: this.$el.find('#loan-balance').val(),

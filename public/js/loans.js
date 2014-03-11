@@ -1,5 +1,7 @@
 define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $, _) {
     return Backbone.Collection.extend({
+        comparator: 'rate',
+
         initialize: function() {
             this.months = [
                 'January',
@@ -17,14 +19,12 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
             ];
         },
 
-        interestSort: function(a, b) {
-            if ( a.rate > b.rate) {
-                return 1;
-            }
-            else if (b.rate > a.rate) {
-                return -1;
-            }
-            return 0;
+        getBalance: function() {
+            return this.reduce(function(sum, loan) { return  sum + loan.get('balance'); }, 0);
+        },
+
+        getMinimumPayment: function() {
+            return this.reduce(function(sum, loan) { return sum + loan.get('minPayment'); }, 0);
         },
 
         getMonthString: function(value) {
@@ -42,70 +42,66 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
             return balance + getMonthlyInterest(balance, rate) - payment;
         },
 
-        getChartData: function(loans, expectedPayment) {
-            var localLoans = [];
-
-            _.each(loans, function(loan) {
-                localLoans.push({
-                    balance: loan.balance,
-                    rate: loan.rate,
-                    minPayment: loan.minPayment
-                });
-            });
-
-            localLoans.sort(interestSort);
-
-            var minimumPayment = _.reduce(localLoans, function(loan, sum) { return sum + loan.minPayment; }, 0);
-            expectedPayment = expectedPayment || minimumPayment;
-            if(expectedPayment < minimumPayment) {
-                throw new Error("The expected payment cannot be less than the minimum payment");
-            }
-
-            var remainingLoanBalance = _.reduce(localLoans, function(loan, sum) { return sum + loan.balance; }, 0);
-            if(remainingLoanBalance === 0) {
-                throw new Error("The loan balance is zero");
-            }
-
+        getChartData: function() {
             var loansOverTime = {},
-                currentPayment = expectedPayment,
+                clonedCollection = new Backbone.Collection(this.toJSON()),
+                minimumPayment = this.getMinimumPayment(),
+                currentBalance = this.getBalance(),
+                currentPayment = minimumPayment,
                 currentYear = new Date().year,
                 currentMonth = new Date().month;
 
-            while(localLoans.length > 0) {
+            //This loop needs to run while the loan balance is still greater than zero, but we
+            //don't want to alter the stored loans. Instead, we should keep a running total of the balance, subtracting off the altered
+            //amount until we arrive and zero.
+            while(currentBalance > 0) {
                 //Store off the new loan value and step forward in time
                 if(!loansOverTime[currentYear]) {
                     loansOverTime[currentYear] = {};
                 }
 
-                loansOverTime[currentYear][getMonthString(currentMonth)] = _.reduce(localLoans, function(loan) { return  sum + loan.balance; }, 0);
+                loansOverTime[currentYear][getMonthString(currentMonth)] = currentBalance;
                 currentMonth = getNextMonthIndex(currentMonth);
                 if(currentMonth === 0) {
                     currentYear++;
                 }
 
                 //Reduce the loan values by min payment amount
-                currentPayment = expectedPayment;
-                _.each(localLoans, function(loan, index) {
-                    loan.balance = getNextMonthLoanBalance(loan.balance, loan.rate, loan.minPayment);
+                currentPayment = minimumPayment;
+                currentBalance -= currentPayment;
+                clonedCollection.forEach(function(loan) {
+                    if(loan.get('balance') === 0) return;
 
-                    currentPayment -= loan.minPayment;
-                    if(loan.balance < 0) {
-                        currentPayment += (-loan.balance);
-                        loan.balance = 0;
+                    var paymentAmount = loan.get('minPayment'),
+                        newBalance = getNextMonthLoanBalance(loan.get('balance'), loan.get('rate'), paymentAmount);
+
+                    if(newBalance < 0) {
+                        paymentAmount += newBalance;
+                        newBalance = 0;
                     }
-                });
 
-                //Remove any completed loans
-                localLoans = _.filter(localLoans, function(loan) { return loan.balance === 0;});
+                    currentPayment -= paymentAmount;
+                    loan.set('balance', newBalance);
+                });
 
                 //Pay any extra money towards the next available loans
                 if(currentPayment > 0) {
-                    _.each(localLoans, function(loan) {
-                        loan.balance -= currentPayment;
-                        if(loan.balance < 0) {
-                            currentPayment += (-loan.balance);
-                            loan.balance = 0;
+                    clonedCollection.some(function(loan) {
+                        if(currentPayment <= 0) return false;
+
+                        //TSL - Interest calc is incorrect.
+                        newBalance = getNextMonthLoanBalance(loan.get('balance'), loan.get('rate'), currentPayments);
+
+                        if(newBalance < 0) {
+                            currentPayment += newBalance;
+                            newBalance = 0;
+                            currentPayment -= loan.get('balance');
                         }
+                        else {
+                            currentPayment = 0;
+                        }
+
+                        loan.set('balance', newBalance);
                     });
                 }
             }

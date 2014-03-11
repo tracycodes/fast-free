@@ -7,7 +7,7 @@ define(["backbone", "jquery", "underscore"], function(Backbone, $, _) {
             this.$el.hide();
         },
         display: function(message) {
-            this.$el.html(_.template(this.template, {message: message}));
+            this.$el.html(_.template(this.template, {message: message})).show();
         }
     });
 });
