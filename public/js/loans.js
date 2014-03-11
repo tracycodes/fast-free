@@ -19,6 +19,10 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
             ];
         },
 
+        getDaysInMonth: function(month, year) {
+            return new Date(year, month, 0).getDate();
+        },
+
         getBalance: function() {
             return this.reduce(function(sum, loan) { return  sum + loan.get('balance'); }, 0);
         },
@@ -32,48 +36,52 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
         },
 
         getNextMonthIndex: function(index) {
-            if(index === months.length - 1) {
+            if(index === this.months.length - 1) {
                 return 0;
             }
             return index + 1;
         },
 
-        getNextMonthLoanBalance: function(balance, rate, payment) {
-            return balance + getMonthlyInterest(balance, rate) - payment;
+        getMonthlyInterest: function(year, month, balance, rate) {
+            return (balance * rate / 365.25) * this.getDaysInMonth(year, month);
+        },
+
+        getMonthLoanBalance: function(year, month, balance, rate, payment) {
+            return balance + this.getMonthlyInterest(year, month, balance, rate) - payment;
         },
 
         getChartData: function() {
             var loansOverTime = {},
                 clonedCollection = new Backbone.Collection(this.toJSON()),
                 minimumPayment = this.getMinimumPayment(),
-                currentBalance = this.getBalance(),
+                fullBalance = this.getBalance(),
                 currentPayment = minimumPayment,
-                currentYear = new Date().year,
-                currentMonth = new Date().month;
+                currentYear = new Date().getFullYear(),
+                currentMonth = new Date().getMonth();
 
             //This loop needs to run while the loan balance is still greater than zero, but we
             //don't want to alter the stored loans. Instead, we should keep a running total of the balance, subtracting off the altered
             //amount until we arrive and zero.
-            while(currentBalance > 0) {
+            while(fullBalance > 0) {
                 //Store off the new loan value and step forward in time
                 if(!loansOverTime[currentYear]) {
                     loansOverTime[currentYear] = {};
                 }
 
-                loansOverTime[currentYear][getMonthString(currentMonth)] = currentBalance;
-                currentMonth = getNextMonthIndex(currentMonth);
+                loansOverTime[currentYear][this.getMonthString(currentMonth)] = fullBalance;
+                currentMonth = this.getNextMonthIndex(currentMonth);
                 if(currentMonth === 0) {
                     currentYear++;
                 }
 
                 //Reduce the loan values by min payment amount
                 currentPayment = minimumPayment;
-                currentBalance -= currentPayment;
                 clonedCollection.forEach(function(loan) {
                     if(loan.get('balance') === 0) return;
 
-                    var paymentAmount = loan.get('minPayment'),
-                        newBalance = getNextMonthLoanBalance(loan.get('balance'), loan.get('rate'), paymentAmount);
+                    //TSL - This assumes that the minimum payment is enough to cover the interest cost
+                    var paymentAmount = loan.get('minPayment');
+                    var newBalance = this.getMonthLoanBalance(currentYear, currentMonth, loan.get('balance'), loan.get('rate'), paymentAmount);
 
                     if(newBalance < 0) {
                         paymentAmount += newBalance;
@@ -81,29 +89,30 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
                     }
 
                     currentPayment -= paymentAmount;
+                    fullBalance -= (loan.get('balance') - newBalance);
                     loan.set('balance', newBalance);
-                });
+                }, this);
 
                 //Pay any extra money towards the next available loans
-                if(currentPayment > 0) {
-                    clonedCollection.some(function(loan) {
-                        if(currentPayment <= 0) return false;
+                clonedCollection.some(function(loan) {
+                    if(currentPayment <= 0) return true;
 
-                        //TSL - Interest calc is incorrect.
-                        newBalance = getNextMonthLoanBalance(loan.get('balance'), loan.get('rate'), currentPayments);
+                    var loanBalance = loan.get('balance');
 
-                        if(newBalance < 0) {
-                            currentPayment += newBalance;
-                            newBalance = 0;
-                            currentPayment -= loan.get('balance');
-                        }
-                        else {
-                            currentPayment = 0;
-                        }
+                    if(loanBalance > currentPayment) {
+                        loan.set('balance', loanBalance - currentPayment);
+                        fullBalance -= currentPayment;
+                        return true;
+                    }
+                    else {
+                        loan.set('balance', 0);
+                        currentPayment -= loanBalance;
+                        fullBalance -= loanBalance;
+                    }
+                });
 
-                        loan.set('balance', newBalance);
-                    });
-                }
+                //Handle all loans paid off and extra current payment.
+                //Add money to a "savings" account
             }
 
             return loansOverTime;
