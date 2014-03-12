@@ -1,4 +1,4 @@
-define(["backbone", "jquery", "underscore"], function(Backbone, $, _) {
+define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) {
     return Backbone.View.extend({
         el: '#chart',
 
@@ -9,8 +9,7 @@ define(["backbone", "jquery", "underscore"], function(Backbone, $, _) {
 
         updateChart: function() {
             var data = this.loans.getChartData();
-            debugger;
-            //render it.
+
         }
     });
 });

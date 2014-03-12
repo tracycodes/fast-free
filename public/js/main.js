@@ -4,7 +4,7 @@ require.config({
         "jquery.bootstrap": "../components/bootstrap/dist/js/bootstrap.min",
         "underscore": "../components/underscore/underscore",
         "backbone": "../components/backbone/backbone",
-        //"d3": "../components/d3/d3.min.js",
+        "d3": "../components/d3/d3.min",
     },
     shim: {
         'backbone': {
