@@ -19,10 +19,6 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
             ];
         },
 
-        getDaysInMonth: function(month, year) {
-            return new Date(year, month, 0).getDate();
-        },
-
         getBalance: function() {
             return this.reduce(function(sum, loan) { return  sum + loan.get('balance'); }, 0);
         },
@@ -40,6 +36,10 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
                 return 0;
             }
             return index + 1;
+        },
+
+        getDaysInMonth: function(month, year) {
+            return new Date(year, month, 0).getDate();
         },
 
         getMonthlyInterest: function(year, month, balance, rate) {
@@ -63,6 +63,10 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
             //don't want to alter the stored loans. Instead, we should keep a running total of the balance, subtracting off the altered
             //amount until we arrive and zero.
             while(fullBalance > 0) {
+                if(clonedCollection.reduce(function(sum, loan) { return  sum + loan.get('balance'); }, 0) > fullBalance) {
+                    throw Error("Whoa there. It looks like your loan balance is getting higher over time. You likely need to pay a higher minimum");
+                }
+
                 //Store off the new loan value and step forward in time
                 if(!loansOverTime[currentYear]) {
                     loansOverTime[currentYear] = {};
@@ -79,17 +83,24 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
                 clonedCollection.forEach(function(loan) {
                     if(loan.get('balance') === 0) return;
 
-                    //TSL - This assumes that the minimum payment is enough to cover the interest cost
                     var paymentAmount = loan.get('minPayment');
+
+                    //Balance could be negative if the payment amount is too high.
                     var newBalance = this.getMonthLoanBalance(currentYear, currentMonth, loan.get('balance'), loan.get('rate'), paymentAmount);
 
+                    //Strip off the partial cents. Just assume the bank wins here.
+                    newBalance = parseFloat(newBalance.toFixed(2), 10);
+
                     if(newBalance < 0) {
-                        paymentAmount += newBalance;
+                        paymentAmount = loan.get('balance');
+                        fullBalance -= loan.get('balance');
                         newBalance = 0;
+                    }
+                    else {
+                        fullBalance -= (loan.get('balance') - newBalance);
                     }
 
                     currentPayment -= paymentAmount;
-                    fullBalance -= (loan.get('balance') - newBalance);
                     loan.set('balance', newBalance);
                 }, this);
 

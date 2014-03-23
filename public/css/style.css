@@ -34,6 +34,11 @@
     stroke: blue;
 }
 
+#chart line.plot {
+    stroke: #ddd;
+    stroke-width: 1px;
+}
+
 #chart line.axis {
     stroke: black;
     stroke-width: 2px;
