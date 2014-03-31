@@ -2,7 +2,11 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
     return Backbone.Collection.extend({
         comparator: 'rate',
 
-        initialize: function() {
+        initialize: function(models, vent) {
+            this.vent = vent;
+
+            vent.on('update-payment', this.setActualPayment, this);
+
             this.months = [
                 'January',
                 'February',
@@ -25,6 +29,14 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
 
         getMinimumPayment: function() {
             return this.reduce(function(sum, loan) { return sum + loan.get('minPayment'); }, 0);
+        },
+
+        setActualPayment: function(actualPayment) {
+            this.actualPayment = actualPayment;
+        },
+
+        getActualPayment: function() {
+            return this.actualPayment || this.getMinimumPayment();
         },
 
         getMonthString: function(value) {
@@ -50,20 +62,28 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
             return balance + this.getMonthlyInterest(year, month, balance, rate) - payment;
         },
 
-        getChartData: function() {
+        getMinimumChartData: function() {
+            return this.getChartData(this.getMinimumPayment());
+        },
+
+        getActualChartData: function() {
+            return this.getChartData(this.getActualPayment());
+        },
+
+        getChartData: function(paymentAmount) {
             var loansOverTime = {},
+                maxBalance = this.getBalance(),
                 clonedCollection = new Backbone.Collection(this.toJSON()),
-                minimumPayment = this.getMinimumPayment(),
-                fullBalance = this.getBalance(),
-                currentPayment = minimumPayment,
+                fullBalance = maxBalance,
+                currentPayment = paymentAmount,
                 currentYear = new Date().getFullYear(),
                 currentMonth = new Date().getMonth();
 
             //This loop needs to run while the loan balance is still greater than zero, but we
             //don't want to alter the stored loans. Instead, we should keep a running total of the balance, subtracting off the altered
             //amount until we arrive and zero.
-            while(fullBalance > 0) {
-                if(clonedCollection.reduce(function(sum, loan) { return  sum + loan.get('balance'); }, 0) > fullBalance) {
+            while(parseFloat(fullBalance.toFixed(2), 10) > 0) { // Handle floating point insanity
+                if(clonedCollection.reduce(function(sum, loan) { return  sum + loan.get('balance'); }, 0) > maxBalance) {
                     throw Error("Whoa there. It looks like your loan balance is getting higher over time. You likely need to pay a higher minimum");
                 }
 
@@ -78,8 +98,8 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
                     currentYear++;
                 }
 
-                //Reduce the loan values by min payment amount
-                currentPayment = minimumPayment;
+                //Reduce the loan values by payment amount
+                currentPayment = paymentAmount;
                 clonedCollection.forEach(function(loan) {
                     if(loan.get('balance') === 0) return;
 
@@ -87,10 +107,6 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
 
                     //Balance could be negative if the payment amount is too high.
                     var newBalance = this.getMonthLoanBalance(currentYear, currentMonth, loan.get('balance'), loan.get('rate'), paymentAmount);
-
-                    //Strip off the partial cents. Just assume the bank wins here.
-                    newBalance = parseFloat(newBalance.toFixed(2), 10);
-
                     if(newBalance < 0) {
                         paymentAmount = loan.get('balance');
                         fullBalance -= loan.get('balance');
@@ -105,22 +121,22 @@ define(["loan", "backbone", "jquery", "underscore"], function(Loan, Backbone, $,
                 }, this);
 
                 //Pay any extra money towards the next available loans
-                clonedCollection.some(function(loan) {
-                    if(currentPayment <= 0) return true;
+                if(currentPayment > 0) {
+                    clonedCollection.some(function(loan) {
+                        var loanBalance = loan.get('balance');
 
-                    var loanBalance = loan.get('balance');
-
-                    if(loanBalance > currentPayment) {
-                        loan.set('balance', loanBalance - currentPayment);
-                        fullBalance -= currentPayment;
-                        return true;
-                    }
-                    else {
-                        loan.set('balance', 0);
-                        currentPayment -= loanBalance;
-                        fullBalance -= loanBalance;
-                    }
-                });
+                        if(loanBalance > currentPayment) {
+                            loan.set('balance', loanBalance - currentPayment);
+                            fullBalance -= currentPayment;
+                            return true;
+                        }
+                        else {
+                            loan.set('balance', 0);
+                            currentPayment -= loanBalance;
+                            fullBalance -= loanBalance;
+                        }
+                    });
+                }
 
                 //Handle all loans paid off and extra current payment.
                 //Add money to a "savings" account

@@ -2,23 +2,32 @@ define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) 
     return Backbone.View.extend({
         el: '#chart',
 
-        initialize: function(loans) {
+        initialize: function(loans, vent) {
+            this.vent = vent;
             this.loans = loans;
-            this.loans.on('add', this.updateChart, this);
+            this.loans.on('add', this.redrawChart, this);
+            vent.on('update-payment', this.redrawChart, this);
         },
 
-        updateChart: function() {
-            var data = this.loans.getChartData();
+        redrawChart: function() {
+            this.$el.find('svg').remove();
+            this.$el.append('<svg>');
 
-            var totalWidth = this.$el.width(),
-                totalHeight = this.$el.height();
+            this.plotChartData(this.loans.getMinimumChartData());
+            this.plotChartData(this.loans.getActualChartData());
+        },
+
+        plotChartData: function(chartData) {
+            var chart = this.$el.find('svg'),
+                totalWidth = chart.width(),
+                totalHeight = chart.height();
 
             //Need actual coordinates to calculate this data. Use underscore for transformations.
-            var years = _.keys(data),
+            var years = _.keys(chartData),
                 yearWidth = totalWidth / years.length;
 
             //Draw the axes (need to rewrite to use d3 new axis feature)
-            d3.select(this.el)
+            d3.select(chart[0])
                 .append('line')
                 .attr('x1', 0)
                 .attr('y1', totalHeight)
@@ -26,7 +35,7 @@ define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) 
                 .attr('y2', totalHeight)
                 .attr('class', 'axis');
 
-            d3.select(this.el)
+            d3.select(chart[0])
                 .append('line')
                 .attr('x1', 0)
                 .attr('y1', totalHeight)
@@ -37,7 +46,7 @@ define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) 
 
             //Plot the data.
             var balances = [];
-            _.each(data, function(months, year) {
+            _.each(chartData, function(months, year) {
                 _.each(months, function(balance, month) {
                     balances.push(balance);
                 });
@@ -51,7 +60,7 @@ define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) 
                 var height = totalHeight - ((balance / maxBalance) * totalHeight),
                     width = (index + 1) * columnWidth;
 
-                d3.select(this.el)
+                d3.select(chart[0])
                     .append('line')
                         .attr('x1', index * columnWidth)
                         .attr('y1', lastHeight)
@@ -60,14 +69,14 @@ define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) 
                         .attr('class', 'plot');
 
                 if(index % 12 === 0 || index === balances.length - 1) {
-                    d3.select(this.el)
+                    d3.select(chart[0])
                         .append('circle')
                         .attr('cx', width)
                         .attr('cy', height)
                         .attr('r', 3)
                         .attr('class', 'axis');
 
-                    d3.select(this.el)
+                    d3.select(chart[0])
                         .append('text')
                         .attr('x', width + 2)
                         .attr('y', height - 2)
@@ -76,7 +85,7 @@ define(["backbone", "jquery", "underscore", "d3"], function(Backbone, $, _, d3) 
 
                 lastHeight = height;
             }, this);
-            }
+        }
 
     });
 });

@@ -20,9 +20,12 @@ require.config({
     }
 });
 
-require(["loan-entry", "chart", "loans", "jquery", "jquery.bootstrap"], function (LoanEntry, Chart, Loans, $) {
-    var loans = new Loans();
+require(["loan-entry", "chart", "table", "loans", "slider", "jquery", "jquery.bootstrap"], function (LoanEntry, Chart, Table, Loans, Slider, $) {
+    var vent = _.extend({}, Backbone.Events),
+        loans = new Loans(false, vent);
 
     new LoanEntry(loans);
-    new Chart(loans);
+    new Chart(loans, vent);
+    new Table(loans, vent);
+    new Slider(loans, vent);
 });
